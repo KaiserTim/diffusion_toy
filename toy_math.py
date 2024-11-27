@@ -6,8 +6,7 @@ from tqdm import tqdm
 
 # todo: Abstract the model to a class
 class ToyModel:
-    def __init__(self, data, data_labels, num_steps, sigma_min, sigma_max, rho, init,
-                 pos_kwargs, neg_kwargs, heun=False):
+    def __init__(self, data, data_labels, num_steps, sigma_min, sigma_max, rho, pos_kwargs, neg_kwargs, heun=False):
         """
         Initialize the ToyModel class.
         Args:
@@ -17,7 +16,6 @@ class ToyModel:
             sigma_min: Minimum noise level sigma_min
             sigma_max: Maximum noise level sigma_max
             rho: Exponent for the time step discretization
-            init: Initialization method for the trajectories, one of 'random', 'sphere', or a numpy array of shape (n, D)
             pos_kwargs: The keyword arguments for the positive model, a dictionary with keys "delta" and "cond"
             neg_kwargs: The keyword arguments for the negative model, a dictionary
             heun: Whether to use the Heun correction
@@ -29,7 +27,6 @@ class ToyModel:
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self.rho = rho
-        self.init = init
         self.heun = heun
         self.pos_kwargs = pos_kwargs
         self.neg_kwargs = neg_kwargs
@@ -39,17 +36,22 @@ class ToyModel:
         self.t_steps = self.t_schedule()
 
 
-    def run(self, x_labels=None, n=1, **score_kwargs):
+    def run(self, x_labels=None, n=1, init='random', **score_kwargs):
         """
         Run the simulation for n trajectories.
         Args:
             x_labels: Array of labels for each trajectory, shape (n,)
             n: Number of trajectories to simulate
+            init: Initialization method for the trajectories, one of 'random', 'sphere', or a numpy array of shape (n, D)
             score_kwargs: Keyword arguments for the score function
         """
+        if type(init) == np.ndarray:
+            if init.shape[0] != n:
+                n = init.shape[0]
+                print(f"Using manual initialization with {n} trajectories.")
         if x_labels is None:
             x_labels = np.random.choice(self.label_dim, n)
-        return self.compute_traject(x_labels, n, **score_kwargs)
+        return self.compute_traject(x_labels, n, init, **score_kwargs)
 
     def t_schedule(self):
         """Time step discretization."""
@@ -97,6 +99,8 @@ class ToyModel:
             x_labels = np.zeros_like(x_labels)  # Overwrite x_labels to have a single unique label
             data_labels = np.zeros_like(self.data_labels)  # Overwrite data_labels to have a single unique label
         else:
+            assert x_labels is not None, "Conditional model requires x_labels to be provided."
+            assert len(x_labels) == len(x), f"x_labels ({len(x_labels)}) must have the same number of elements as x ({len(x)})."
             data_labels = self.data_labels
 
         # Iterate over each unique label in x_labels
@@ -117,7 +121,6 @@ class ToyModel:
             log_gauss = self.log_gaussian_density(x_subset, data_subset, t_sq)  # shape (n_label, m_label)
             max_log_gauss = np.max(log_gauss, axis=1, keepdims=True)  # shape (n_label, 1)
             gauss_stable = np.exp(log_gauss - max_log_gauss)  # shape (n_label, m_label), avoids underflow in exp
-
             log_N = max_log_gauss + np.log(np.sum(gauss_stable, axis=1, keepdims=True))  # shape (n_label, 1)
 
             # If N is very small for any x_subset, return the closest datapoint for those
@@ -175,18 +178,22 @@ class ToyModel:
         """
         pos_kwargs = self.opt_kwargs if opt else self.pos_kwargs
         y_pos = self.y_toy(x, t, x_labels, **pos_kwargs)  # (D,)
-        y_neg = self.y_toy(x, t, x_labels, **self.neg_kwargs)
 
-        if guid_weight == 'opt_weight' and interval[0] <= i <= interval[-1]:
-            y_opt = self.y_star(x, t ** 2, x_labels) # Optimal model
-            w = norm(y_opt - y_pos) / np.maximum(norm(y_pos - y_neg), 1e-128)
-            # guid_weight = norm(y_opt - y_pos) / norm(y_pos - y_neg)
-        elif interval[0] <= i <= interval[-1]:
-            w = guid_weight
+        if interval is None:
+            interval = [0, self.num_steps - 1]
+        if interval[0] <= i <= interval[-1] and guid_weight:
+            y_neg = self.y_toy(x, t, x_labels, **self.neg_kwargs)
+            if guid_weight == 'opt_weight':
+                y_opt = self.y_star(x, t ** 2, x_labels, self.pos_kwargs['cond'])
+                w = norm(y_opt - y_pos) / np.maximum(norm(y_pos - y_neg), 1e-128)
+                # guid_weight = norm(y_opt - y_pos) / norm(y_pos - y_neg)
+            else:
+                w = guid_weight
+            y_pred = y_pos + w * (y_pos - y_neg)
         else:
+            y_pred = y_pos
             w = 0
 
-        y_pred = y_pos + w * (y_pos - y_neg)
         d_cur = (x - y_pred) / t  # score = force / t^2
         return d_cur, y_pred, w
 
@@ -222,7 +229,7 @@ class ToyModel:
 
         return x_next, d_cur, y_pred, w
 
-    def compute_traject(self, x_labels, n, **score_kwargs):
+    def compute_traject(self, x_labels, n, init, **score_kwargs):
         """
         Simulate a full trajectory.
         Args:
@@ -236,10 +243,13 @@ class ToyModel:
             np.ndarray: The guidance weight that was computed in each step, shape (n, N)
         """
         # Different initializations
-        if self.init == 'random':
+        if type(init) == np.ndarray:
+            assert type(init) == np.ndarray, "Manual init needs to be a numpy array of shape (n, D)."
+            x_next = init  # manual init
+        elif init == 'random':
             np.random.seed(0)
             x_next = self.t_steps[0] * np.random.randn(n, self.data.shape[1])
-        elif self.init == 'sphere':
+        elif init == 'sphere':
             radius = [80]  # Set multiple radii for multiple spheres, if desired
             x_next = np.zeros((n, self.data.shape[1]))
             split = np.array_split(np.arange(n), len(radius))
@@ -249,8 +259,7 @@ class ToyModel:
                                      endpoint=False) + 1e-2  # slightly rotate to avoid "stuck" trajectories
                 x_next[split[c]] = r * np.vstack((np.cos(angles), np.sin(angles))).T
         else:
-            assert type(self.init) == np.ndarray, "Manual init needs to be a numpy array of shape (n, D)."
-            x_next = self.init  # manual init
+            raise ValueError("Invalid initialization method. Choose one of 'random', 'sphere', or a numpy array.")
 
         trajects = np.empty((n, self.t_steps.shape[0] - 1, 2))
         preds = np.empty((n, self.t_steps.shape[0] - 1, 2))

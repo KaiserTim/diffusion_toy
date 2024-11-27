@@ -2,10 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from numpy.linalg import norm
-from toy_math import ToyModel
 
-# ------------------------------------------
-# Plotting
+
 def plot_traject(trajec_list, t_steps, alpha=None, scale=1, width=0.005):
     n = len(t_steps) - 2
 
@@ -112,7 +110,7 @@ def plot_row(n, m, i, trajects, preds, weight_hists, opt_trajects, opt_preds, op
     return total_error
 
 
-def full_grid(model, x_labels, n, m, guid_weight, interval, save_as=None):
+def full_grid(model, x_labels, n, m, guid_weight, interval, init, save_as=None):
     """
     Args:
         model: ToyModel instance to use for sampling
@@ -130,7 +128,7 @@ def full_grid(model, x_labels, n, m, guid_weight, interval, save_as=None):
     plt.figure(figsize=(12, 12), facecolor='white')
     plt.subplots_adjust(wspace=0.1, hspace=0.15)
     window_size = 2.5
-    model_kwargs = {'interval': interval, 'x_labels': x_labels, 'n': n}
+    model_kwargs = {'interval': interval, 'x_labels': x_labels, 'n': n, 'init': init}
     counter = 0  # Row counter
 
     # Optimal model trajectories as reference
@@ -169,41 +167,23 @@ def full_grid(model, x_labels, n, m, guid_weight, interval, save_as=None):
     return returns_hist
 
 
-def optimal_weights(data, n, t_steps, guid_weight, interval, pos_kwargs, neg_kwargs, init):
-    """Plot the optimal guidance weight w^*(x,t)"""
-    weight_hists = compute_traject(guid_weight=guid_weight,
-                                   pos_kwargs=pos_kwargs,
-                                   neg_kwargs=neg_kwargs,
-                                   init=init,
-                                   data=data,
-                                   n=n,
-                                   t_steps=t_steps,
-                                   interval=interval)[2]
-
-    for hist in weight_hists.mean(axis=0, keepdims=True):  # Average over trajectories
-        plt.plot(hist, label=f"$\\delta_{{neg}} = {neg_kwargs['delta']}$")
-
-
-# ------------------------------------------
-# Geometric analysis
-def geom_analysis(data, t_steps, init, interval, guid_weight, steps, pos_kwargs, neg_kwargs, legend=False):
-    kwargs = {'init': init, 'data': data, 'n': 1, 't_steps': t_steps, 'interval': interval}
-    alpha = 0.8  # arrow brightness
-
+def geom_analysis(model, x_labels, guid_weight, interval, init, steps, legend=False):
     # Compute trajectory as a baseline
-    x_opt, y_opt, weights_opt = compute_traject(guid_weight=guid_weight, pos_kwargs=pos_kwargs, neg_kwargs=neg_kwargs,
-                                                **kwargs)
+    model_kwargs = {'guid_weight': guid_weight, 'interval': interval, 'x_labels': x_labels, 'n': 1, 'init': init}
+    x_opt, y_opt, weights_opt = model.run(opt=False, **model_kwargs)
 
     for step in steps:
         # Select one trajectory and plot it
-        plot_traject([x_opt[2]], t_steps, scale=0.9, width=0.008)
-        x_start = x_opt[2][step - 1]
-        t_cur, t_next = t_steps[step], t_steps[step + 1]
+        plot_traject([x_opt[0]], model.t_steps, scale=0.9, width=0.008, alpha=1)
+        x_start = x_opt[0][step - 1]
+        t_cur, t_next = model.t_steps[step], model.t_steps[step + 1]
 
         # Predictions
-        y_opt = y_toy(x_start, t_cur, 2, data, **{'delta': 0, 'cond': pos_kwargs['cond']})
-        y_pos = y_toy(x_start, t_cur, 2, data, **pos_kwargs)
-        y_neg = y_toy(x_start, t_cur, 2, data, **neg_kwargs)
+        if x_labels is None:
+            x_labels = [0]
+        y_opt = model.y_toy(x_start[None], t_cur, x_labels, **{'delta': 0, 'cond': model.pos_kwargs['cond']}).squeeze()
+        y_pos = model.y_toy(x_start[None], t_cur, x_labels, **model.pos_kwargs).squeeze()
+        y_neg = model.y_toy(x_start[None], t_cur, x_labels, **model.neg_kwargs).squeeze()
 
         # Optimal weight
         opt_weight = norm(y_opt - y_pos) / norm(y_pos - y_neg)
@@ -253,5 +233,14 @@ def geom_analysis(data, t_steps, init, interval, guid_weight, steps, pos_kwargs,
             plt.legend(prop={'size': 11})
 
     # Setup
-    plt.scatter(data[:, 0], [data[:, 1]], label='data', marker='+', s=100 * 4, color='orangered', alpha=1)
+    plt.scatter(model.data[:, 0], [model.data[:, 1]], label='data', marker='+', s=100 * 4, color='orangered', alpha=1)
     print(f'Opt weight = {opt_weight:.2f}')
+
+
+def optimal_weights(model, x_labels, guid_weight, interval, init, n=100):
+    """Plot the optimal guidance weight w^*(x,t)"""
+    model_kwargs = {'guid_weight': guid_weight, 'interval': interval, 'x_labels': x_labels, 'n': n, 'init': init}
+    weight_hists = model.run(opt=False, **model_kwargs)[2]
+
+    for hist in weight_hists.mean(axis=0, keepdims=True):  # Average over trajectories
+        plt.plot(hist, label=f"$\\delta_{{neg}} = {model.neg_kwargs['delta']}$")
