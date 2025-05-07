@@ -11,9 +11,4 @@ Requirements:
 
 ## Diffusion guidance
 
-This section provides the full framework for the simulation of Diffusion Guidance in 2D as detailed in [The Unreasonable Effectiveness of Guidance for Diffusion Models](https://arxiv.org/abs/2411.10257).
-
-
-## Generalization
-
-To come. 
+This section provides the full framework for the simulation of Diffusion Guidance in 2D as detailed in the paper.

@@ -184,9 +184,9 @@ def geom_analysis(model, x_labels, guid_weight, interval, init, steps, legend=Fa
         # Predictions
         if x_labels is None:
             x_labels = [0]
-        y_opt = model.y_toy(x_start[None], t_cur, x_labels, **{'delta': 0, 'cond': model.pos_kwargs['cond']}).squeeze()
-        y_pos = model.y_toy(x_start[None], t_cur, x_labels, **model.pos_kwargs).squeeze()
-        y_neg = model.y_toy(x_start[None], t_cur, x_labels, **model.neg_kwargs).squeeze()
+        y_opt = model.y_delta(x_start[None], t_cur, x_labels, **{'delta': 0, 'cond': model.pos_kwargs['cond']}).squeeze()
+        y_pos = model.y_delta(x_start[None], t_cur, x_labels, **model.pos_kwargs).squeeze()
+        y_neg = model.y_delta(x_start[None], t_cur, x_labels, **model.neg_kwargs).squeeze()
 
         # Optimal weight
         opt_weight = norm(y_opt - y_pos) / norm(y_pos - y_neg)

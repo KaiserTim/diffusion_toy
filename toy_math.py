@@ -143,7 +143,7 @@ class ToyModel:
 
     def y_delta(self, x, t, x_labels, delta, cond):
         """
-        Error-prone prediction y_delta.  # todo put eq.
+        Error-prone prediction y_delta.
         Args:
             x: Current point in the trajectory x(t), shape (n, D)
             t: Current noise level sigma(t), scalar
