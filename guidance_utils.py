@@ -48,7 +48,7 @@ def setup_plot(window_size, data):
 
 
 def plot_row(n, m, i, trajects, preds, weight_hists, opt_trajects, opt_preds, opt_weight_hists,
-             ylabel, titles, window_size, data, t_steps):
+             ylabel, error_ylim, titles, window_size, data, t_steps):
     """
     Args:
         n: Number of trajectories
@@ -93,7 +93,7 @@ def plot_row(n, m, i, trajects, preds, weight_hists, opt_trajects, opt_preds, op
     plot_endpoints(data, trajects)
     setup_plot(window_size, data)
     if titles:
-        plt.title('$x(0)$')
+        plt.title('$x(1)$')
 
     total_error = (((trajects[None, :, -1] - data[:, None]) ** 2).min(axis=0).sum(axis=-1) ** 0.5).mean()
     plt.xlabel(f"{total_error:.1e}")
@@ -104,13 +104,15 @@ def plot_row(n, m, i, trajects, preds, weight_hists, opt_trajects, opt_preds, op
     plt.gca().yaxis.tick_right()
     plt.gca().yaxis.set_label_position("right")
     plt.grid(alpha=0.2)
+    if error_ylim is not None:
+        plt.ylim(error_ylim)
     if titles:
         plt.title('L2 Error')
 
     return total_error
 
 
-def full_grid(model, x_labels, n, m, guid_weight, interval, init, save_as=None):
+def full_grid(model, x_labels, n, m, guid_weight, interval, init, error_ylim=None, save_as=None):
     """
     Args:
         model: ToyModel instance to use for sampling
@@ -152,6 +154,7 @@ def full_grid(model, x_labels, n, m, guid_weight, interval, init, save_as=None):
                                     *returns,       # Trajectories, predictions, weights
                                     *opt_returns,   # Optimal trajectories, predictions, weights
                                     label,          # ylabels
+                                    error_ylim,     # ylim
                                     opt,            # Titles
                                     window_size,    # Window size
                                     model.data,     # Data

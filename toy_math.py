@@ -4,7 +4,6 @@ from numpy.linalg import norm
 from tqdm import tqdm
 
 
-# todo: Abstract the model to a class
 class ToyModel:
     def __init__(self, data, data_labels, num_steps, sigma_min, sigma_max, rho, pos_kwargs, neg_kwargs, heun=False):
         """
@@ -142,9 +141,9 @@ class ToyModel:
 
         return y_star
 
-    def y_toy(self, x, t, x_labels, delta, cond):
+    def y_delta(self, x, t, x_labels, delta, cond):
         """
-        Error-prone prediction y_delta.
+        Error-prone prediction y_delta.  # todo put eq.
         Args:
             x: Current point in the trajectory x(t), shape (n, D)
             t: Current noise level sigma(t), scalar
@@ -177,15 +176,15 @@ class ToyModel:
             float: The guidance weight
         """
         pos_kwargs = self.opt_kwargs if opt else self.pos_kwargs
-        y_pos = self.y_toy(x, t, x_labels, **pos_kwargs)  # (D,)
+        y_pos = self.y_delta(x, t, x_labels, **pos_kwargs)  # (D,)
 
         if interval is None:
             interval = [0, self.num_steps - 1]
         if interval[0] <= i <= interval[-1] and guid_weight:
-            y_neg = self.y_toy(x, t, x_labels, **self.neg_kwargs)
+            y_neg = self.y_delta(x, t, x_labels, **self.neg_kwargs)
             if guid_weight == 'opt_weight':
                 y_opt = self.y_star(x, t ** 2, x_labels, self.pos_kwargs['cond'])
-                w = norm(y_opt - y_pos) / np.maximum(norm(y_pos - y_neg), 1e-128)
+                w = norm(y_pos - y_opt) / np.maximum(norm(y_pos - y_neg), 1e-128)
                 # guid_weight = norm(y_opt - y_pos) / norm(y_pos - y_neg)
             else:
                 w = guid_weight
