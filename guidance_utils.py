@@ -93,7 +93,7 @@ def plot_row(n, m, i, trajects, preds, weight_hists, opt_trajects, opt_preds, op
     plot_endpoints(data, trajects)
     setup_plot(window_size, data)
     if titles:
-        plt.title('$x(1)$')
+        plt.title('$x(0)$')
 
     total_error = (((trajects[None, :, -1] - data[:, None]) ** 2).min(axis=0).sum(axis=-1) ** 0.5).mean()
     plt.xlabel(f"{total_error:.1e}")
